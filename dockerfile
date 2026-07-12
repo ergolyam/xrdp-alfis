@@ -1,6 +1,6 @@
 ARG VERSION=v0.9.0
 
-FROM docker.io/rust:1.96.0-alpine3.23 AS builder
+FROM docker.io/rust:1.97.0-alpine3.24 AS builder
 
 ARG VERSION
 
@@ -17,7 +17,7 @@ RUN cargo build --release && \
     rm -rf /build
 
 
-FROM ghcr.io/ergolyam/xrdp-docker:alpine-3.23 AS main
+FROM ghcr.io/ergolyam/xrdp-docker:alpine-3.24 AS main
 
 RUN apk add --no-cache \
     libcap-utils \
