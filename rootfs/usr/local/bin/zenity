@@ -1,0 +1,227 @@
+#!/usr/bin/env tclsh
+# Minimal zenity-compatible file picker implemented with Tcl/Tk.
+# Intended as a backend shim for tinyfiledialogs on systems where only Tk exists.
+
+proc stdout_line {text} {
+    fconfigure stdout -encoding utf-8 -translation lf
+    puts stdout $text
+    flush stdout
+}
+
+# tinyfiledialogs probes zenity without necessarily having an active display.
+if {[lsearch -exact $argv "--version"] >= 0} {
+    stdout_line "3.44.0"
+    exit 0
+}
+
+if {[lsearch -exact $argv "--help"] >= 0 || [lsearch -exact $argv "--help-all"] >= 0} {
+    stdout_line "Tk zenity compatibility shim: --file-selection, --save, --directory, --multiple, --separator, --title, --filename, --file-filter"
+    exit 0
+}
+
+set mode ""
+set save 0
+set directory 0
+set multiple 0
+set confirmOverwrite 0
+set title "Select a file"
+set filename ""
+set separator "|"
+set filterSpecs {}
+
+for {set i 0} {$i < [llength $argv]} {incr i} {
+    set arg [lindex $argv $i]
+
+    switch -glob -- $arg {
+        "--file-selection" {
+            set mode "file"
+        }
+        "--save" {
+            set mode "file"
+            set save 1
+        }
+        "--directory" {
+            set mode "directory"
+            set directory 1
+        }
+        "--multiple" {
+            set multiple 1
+        }
+        "--confirm-overwrite" {
+            set confirmOverwrite 1
+        }
+        "--title=*" {
+            set title [string range $arg 8 end]
+        }
+        "--title" {
+            if {$i + 1 < [llength $argv]} {
+                incr i
+                set title [lindex $argv $i]
+            }
+        }
+        "--filename=*" {
+            set filename [string range $arg 11 end]
+        }
+        "--filename" {
+            if {$i + 1 < [llength $argv]} {
+                incr i
+                set filename [lindex $argv $i]
+            }
+        }
+        "--separator=*" {
+            set separator [string range $arg 12 end]
+        }
+        "--separator" {
+            if {$i + 1 < [llength $argv]} {
+                incr i
+                set separator [lindex $argv $i]
+            }
+        }
+        "--file-filter=*" {
+            lappend filterSpecs [string range $arg 14 end]
+        }
+        "--file-filter" {
+            if {$i + 1 < [llength $argv]} {
+                incr i
+                lappend filterSpecs [lindex $argv $i]
+            }
+        }
+        "--attach=*" -
+        "--modal" -
+        "--no-markup" -
+        "--width=*" -
+        "--height=*" {
+            # Accepted for compatibility; Tk owns modality and geometry.
+        }
+        default {
+            # Ignore unrelated zenity options. tinyfiledialogs may add harmless
+            # flags depending on its bundled C-library version.
+        }
+    }
+}
+
+if {$mode eq ""} {
+    puts stderr "zenity-tk: only file-selection dialogs are implemented"
+    exit 2
+}
+
+if {[catch {package require Tk} tkError]} {
+    puts stderr "zenity-tk: Tk is unavailable: $tkError"
+    exit 2
+}
+
+wm withdraw .
+catch {wm attributes . -topmost 1}
+
+proc parse_filter {spec} {
+    set spec [string trim $spec]
+    if {$spec eq ""} {
+        return {}
+    }
+
+    set label "Files"
+    set patternText $spec
+    set pipeIndex [string first "|" $spec]
+    if {$pipeIndex >= 0} {
+        set label [string trim [string range $spec 0 [expr {$pipeIndex - 1}]]]
+        set patternText [string trim [string range $spec [expr {$pipeIndex + 1}] end]]
+    }
+
+    # Zenity accepts whitespace-separated globs. Also tolerate semicolons and
+    # commas because older tinyfiledialogs forks have emitted both forms.
+    set patternText [string map {";" " " "," " "} $patternText]
+    set patterns {}
+    foreach pattern [regexp -all -inline {\S+} $patternText] {
+        if {$pattern ne ""} {
+            lappend patterns $pattern
+        }
+    }
+
+    if {[llength $patterns] == 0} {
+        set patterns [list "*"]
+    }
+    if {$label eq ""} {
+        set label [join $patterns " "]
+    }
+
+    return [list $label $patterns]
+}
+
+set filetypes {}
+foreach spec $filterSpecs {
+    set parsed [parse_filter $spec]
+    if {[llength $parsed] == 2} {
+        lappend filetypes $parsed
+    }
+}
+if {[llength $filetypes] > 0} {
+    lappend filetypes [list "All files" [list "*"]]
+}
+
+set initialdir ""
+set initialfile ""
+if {$filename ne ""} {
+    if {[file isdirectory $filename] || [string match "*/" $filename]} {
+        set initialdir [string trimright $filename "/"]
+        if {$initialdir eq ""} {
+            set initialdir "/"
+        }
+    } else {
+        set initialdir [file dirname $filename]
+        set initialfile [file tail $filename]
+        if {$initialdir eq "." && [file pathtype $filename] eq "relative"} {
+            set initialdir ""
+        }
+    }
+}
+
+set options [list -title $title]
+if {$initialdir ne ""} {
+    lappend options -initialdir $initialdir
+}
+if {$initialfile ne ""} {
+    lappend options -initialfile $initialfile
+}
+if {[llength $filetypes] > 0 && !$directory} {
+    lappend options -filetypes $filetypes
+}
+
+set result ""
+set status 0
+if {$directory} {
+    if {[catch {set result [tk_chooseDirectory {*}$options]} dialogError]} {
+        puts stderr "zenity-tk: $dialogError"
+        set status 2
+    }
+} elseif {$save} {
+    # Tk's save dialog performs its own overwrite confirmation on platforms
+    # that support it, so zenity's --confirm-overwrite needs no extra prompt.
+    if {[catch {set result [tk_getSaveFile {*}$options]} dialogError]} {
+        puts stderr "zenity-tk: $dialogError"
+        set status 2
+    }
+} else {
+    if {$multiple} {
+        lappend options -multiple 1
+    }
+    if {[catch {set result [tk_getOpenFile {*}$options]} dialogError]} {
+        puts stderr "zenity-tk: $dialogError"
+        set status 2
+    }
+}
+
+catch {destroy .}
+
+if {$status != 0} {
+    exit $status
+}
+if {$result eq ""} {
+    exit 1
+}
+
+if {$multiple && !$save && !$directory} {
+    stdout_line [join $result $separator]
+} else {
+    stdout_line $result
+}
+exit 0
