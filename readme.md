@@ -43,16 +43,6 @@ This image supports all base variables documented in [`xrdp-docker`](https://git
 
 There are no additional image-specific environment variables. Alfis itself is configured through `/data/alfis.toml`.
 
-## Persistent Data
-
-On the first start, the default Alfis configuration is copied to `/data/alfis.toml`. Alfis then uses `/data` as its working directory, so mounting this directory preserves:
-
-- the configuration in `/data/alfis.toml`
-- the synchronized blockchain database in `/data/blockchain.db`
-- generated or imported key files saved under `/data`
-
-The container updates ownership of `/data` for the RDP user on every start.
-
 ## DNS Access
 
 By default, the Alfis DNS resolver listens only on `127.0.0.3:53` inside the container and is not available to the host or other machines.
