@@ -15,6 +15,7 @@ Alfis (Alternative Free Identity System) combines a peer-to-peer domain database
     ```bash
     docker run -p 3389:3389 \
         -p 4244:4244 \
+        -v xrdp-keys:/keys \
         -e USER=demo -e PASSWD=secret \
         -v $PWD/data:/data \
         ghcr.io/ergolyam/xrdp-alfis:latest
@@ -22,21 +23,19 @@ Alfis (Alternative Free Identity System) combines a peer-to-peer domain database
     - Mounting `/data` keeps the Alfis configuration, blockchain database and keys across restarts.
     - Publishing `4244/tcp` allows other Alfis nodes to connect to your node. Alfis can still make outgoing peer connections if this port is not published.
 
-- Run with ssl keys:
-    ```bash
-    openssl req -x509 -newkey rsa:2048 -nodes -keyout /path/to/key.pem -out /path/to/cert.pem -days 365
-    ```
-    ```bash
-    docker run -p 3389:3389 \
-        -p 4244:4244 \
-        -e USER=demo -e PASSWD=secret \
-        -v $PWD/data:/data \
-        -v /path/to/key.pem:/key.pem:ro \
-        -v /path/to/cert.pem:/cert.pem:ro \
-        ghcr.io/ergolyam/xrdp-alfis:latest
-    ```
-
 - Now connect to **`localhost:3389`** with any RDP client (username **demo**, password **secret**). You will land in the Alfis interface; when Alfis exits, the RDP session ends.
+
+### Required key storage
+
+A writable volume mounted at /keys is required. The container will not start without it.
+
+The container stores the XRDP TLS certificate, private key, and legacy RSA key material in this directory:
+
+- `/keys/cert.pem`
+- `/keys/key.pem`
+- `/keys/rsakeys.ini`
+
+The files are generated automatically on the first start and reused on subsequent starts. The container exits with an error if /keys does not exist or is not writable.
 
 ## Environment Variables
 
