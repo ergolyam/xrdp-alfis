@@ -1,4 +1,4 @@
-ARG VERSION=v0.9.0
+ARG VERSION=v0.10.0
 
 FROM docker.io/rust:1.97.0-alpine3.24 AS builder
 
